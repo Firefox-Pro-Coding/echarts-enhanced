@@ -1,3 +1,28 @@
+# Enhanced Contents
+
+1. Enhanced Graph
+
+Modified Echarts graph-force's relative codes, make the node fixed after dragging.
+
+实现 graph-force 顶点 fixed 功能，拖拽后顶点不回弹
+
+[origin issue #9488](https://github.com/apache/incubator-echarts/issues/9488)
+
+```js
+/**  You may edit the echarts.js source modules, and run as local.
+ *  ./node_modules/echarts/lib/chart/graph/forceHelper.js
+ *  line: 95
+ */
+
+setUnfixed: function (idx) {  // before
+      nodes[idx].fixed = false;
+  },
+
+setUnfixed: function (idx) {  // after
+      nodes[idx].fixed = true;
+  },
+```
+
 # ECharts
 
 <a href="http://echarts.baidu.com">
