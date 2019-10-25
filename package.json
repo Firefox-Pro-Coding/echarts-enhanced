@@ -1,7 +1,7 @@
 {
-    "name": "enhanced-echarts",
+    "name": "@firefox-pro-coding/enhanced-echarts",
     "version": "4.4.0",
-    "description": "A powerful charting and visualization library for browser",
+    "description": "Enhanced echarts package.",
     "license": "Apache-2.0",
     "keywords": [
         "visualization",
