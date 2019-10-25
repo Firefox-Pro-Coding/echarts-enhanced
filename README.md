@@ -1,6 +1,9 @@
-# Enhanced Contents
+# Enhanced Echarts
+Enhanced echarts package.
 
-1. Enhanced Graph
+## Enhanced Contents
+
+**1. Enhanced Graph**
 
 Modified Echarts graph-force's relative codes, make the node fixed after dragging.
 
