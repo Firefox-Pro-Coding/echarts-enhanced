@@ -80,8 +80,9 @@ export function forceLayout(nodes, edges, opts) {
             nodes[idx].fixed = true;
         },
 
+        // enhanced-echarts modified
         setUnfixed: function (idx) {
-            nodes[idx].fixed = false;
+            nodes[idx].fixed = true;
         },
 
         /**
