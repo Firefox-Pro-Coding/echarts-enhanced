@@ -19142,8 +19142,15 @@ function quantity(val) {
     return Math.pow(10, quantityExponent(val));
 }
 
+/**
+ * Exponent of the quantity of a number
+ * e.g., 1234 equals to 1.234*10^3, so quantityExponent(1234) is 3
+ *
+ * @param  {number} val non-negative value
+ * @return {number}
+ */
 function quantityExponent(val) {
-    return Math.floor(Math.log(val) / Math.LN10);
+    return val > 0 ? Math.floor(Math.log(val) / Math.LN10) : 0;
 }
 
 /**
@@ -19308,6 +19315,7 @@ var number = (Object.freeze || Object)({
 	isRadianAroundZero: isRadianAroundZero,
 	parseDate: parseDate,
 	quantity: quantity,
+	quantityExponent: quantityExponent,
 	nice: nice,
 	quantile: quantile,
 	reformIntervals: reformIntervals,
@@ -29846,9 +29854,6 @@ DataDiffer.prototype = {
         initIndexMap(oldArr, oldDataIndexMap, oldDataKeyArr, '_oldKeyGetter', this);
         initIndexMap(newArr, newDataIndexMap, newDataKeyArr, '_newKeyGetter', this);
 
-        // Travel by inverted order to make sure order consistency
-        // when duplicate keys exists (consider newDataIndex.pop() below).
-        // For performance consideration, these code below do not look neat.
         for (i = 0; i < oldArr.length; i++) {
             var key = oldDataKeyArr[i];
             var idx = newDataIndexMap[key];
@@ -29860,7 +29865,7 @@ DataDiffer.prototype = {
                 var len = idx.length;
                 if (len) {
                     len === 1 && (newDataIndexMap[key] = null);
-                    idx = idx.unshift();
+                    idx = idx.shift();
                 }
                 else {
                     newDataIndexMap[key] = null;
@@ -31160,12 +31165,12 @@ listProto.indexOfName = function (name) {
  * @return {number}
  */
 listProto.indexOfRawIndex = function (rawIndex) {
-    if (!this._indices) {
-        return rawIndex;
-    }
-
     if (rawIndex >= this._rawCount || rawIndex < 0) {
         return -1;
+    }
+
+    if (!this._indices) {
+        return rawIndex;
     }
 
     // Indices are ascending
@@ -33783,7 +33788,6 @@ function layout(seriesType, ecModel) {
                 }
                 stacked && (lastStackCoords[stackId][baseValue][sign] += height);
             }
-
             data.setItemLayout(idx, {
                 x: x,
                 y: y,
@@ -33867,7 +33871,7 @@ function isInLargeMode(seriesModel) {
 
 // See cases in `test/bar-start.html` and `#7412`, `#8747`.
 function getValueAxisStart(baseAxis, valueAxis, stacked) {
-    return valueAxis.toGlobalCoord(valueAxis.dataToCoord(0));
+    return valueAxis.toGlobalCoord(valueAxis.dataToCoord(valueAxis.type === 'log' ? 1 : 0));
 }
 
 /*
@@ -36120,7 +36124,6 @@ Axis.prototype = {
         opt = opt || {};
 
         var tickModel = opt.tickModel || this.getTickModel();
-
         var result = createAxisTicks(this, tickModel);
         var ticks = result.ticks;
 
@@ -36132,6 +36135,7 @@ Axis.prototype = {
         }, this);
 
         var alignWithLabel = tickModel.get('alignWithLabel');
+
         fixOnBandTicksCoords(
             this, ticksCoords, result.tickCategoryInterval, alignWithLabel, opt.clamp
         );
@@ -36235,21 +36239,30 @@ function fixOnBandTicksCoords(axis, ticksCoords, tickCategoryInterval, alignWith
 
     var axisExtent = axis.getExtent();
     var last;
+    var diffSize;
     if (ticksLen === 1) {
         ticksCoords[0].coord = axisExtent[0];
         last = ticksCoords[1] = {coord: axisExtent[0]};
     }
     else {
-        var shift = (ticksCoords[1].coord - ticksCoords[0].coord);
+
+        var crossLen = ticksCoords[ticksLen - 1].tickValue - ticksCoords[0].tickValue;
+        var shift = (ticksCoords[ticksLen - 1].coord - ticksCoords[0].coord) / crossLen;
+
         each$1(ticksCoords, function (ticksItem) {
             ticksItem.coord -= shift / 2;
-            var tickCategoryInterval = tickCategoryInterval || 0;
+            tickCategoryInterval = tickCategoryInterval || 0;
             // Avoid split a single data item when odd interval.
             if (tickCategoryInterval % 2 > 0) {
                 ticksItem.coord -= shift / ((tickCategoryInterval + 1) * 2);
             }
         });
-        last = {coord: ticksCoords[ticksLen - 1].coord + shift};
+
+        var dataExtent = axis.scale.getExtent();
+        diffSize = 1 + dataExtent[1] - ticksCoords[ticksLen - 1].tickValue;
+
+        last = {coord: ticksCoords[ticksLen - 1].coord + shift * diffSize};
+
         ticksCoords.push(last);
     }
 
@@ -42060,7 +42073,11 @@ BaseBarSeries.extend({
     defaultOption: {
         // If clipped
         // Only available on cartesian2d
-        clip: true
+        clip: true,
+
+        // If use caps on two sides of bars
+        // Only available on tangential polar bar
+        roundCap: false
     }
 });
 
@@ -42155,6 +42172,98 @@ var barItemStyle = {
         return style;
     }
 };
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * Sausage: similar to sector, but have half circle on both sides
+ * @public
+ */
+var Sausage = extendShape({
+
+    type: 'sausage',
+
+    shape: {
+
+        cx: 0,
+
+        cy: 0,
+
+        r0: 0,
+
+        r: 0,
+
+        startAngle: 0,
+
+        endAngle: Math.PI * 2,
+
+        clockwise: true
+    },
+
+    buildPath: function (ctx, shape) {
+        var x = shape.cx;
+        var y = shape.cy;
+        var r0 = Math.max(shape.r0 || 0, 0);
+        var r = Math.max(shape.r, 0);
+        var dr = (r - r0) * 0.5;
+        var rCenter = r0 + dr;
+        var startAngle = shape.startAngle;
+        var endAngle = shape.endAngle;
+        var clockwise = shape.clockwise;
+
+        var unitStartX = Math.cos(startAngle);
+        var unitStartY = Math.sin(startAngle);
+        var unitEndX = Math.cos(endAngle);
+        var unitEndY = Math.sin(endAngle);
+
+        var lessThanCircle = clockwise
+            ? endAngle - startAngle < Math.PI * 2
+            : startAngle - endAngle < Math.PI * 2;
+
+        if (lessThanCircle) {
+            ctx.moveTo(unitStartX * r0 + x, unitStartY * r0 + y);
+
+            ctx.arc(
+                unitStartX * rCenter + x, unitStartY * rCenter + y, dr,
+                -Math.PI + startAngle, startAngle, !clockwise
+            );
+        }
+
+        ctx.arc(x, y, r, startAngle, endAngle, !clockwise);
+
+        ctx.moveTo(unitEndX * r + x, unitEndY * r + y);
+
+        ctx.arc(
+            unitEndX * rCenter + x, unitEndY * rCenter + y, dr,
+            endAngle - Math.PI * 2, endAngle - Math.PI, !clockwise
+        );
+
+        if (r0 !== 0) {
+            ctx.arc(x, y, r0, endAngle, startAngle, clockwise);
+
+            ctx.moveTo(unitStartX * r0 + x, unitEndY * r0 + y);
+        }
+
+        ctx.closePath();
+    }
+});
 
 /*
 * Licensed to the Apache Software Foundation (ASF) under one
@@ -42271,6 +42380,8 @@ extendChartView({
         // We don't use clipPath in normal mode because we needs a perfect animation
         // And don't want the label are clipped.
 
+        var roundCap = seriesModel.get('roundCap', true);
+
         data.diff(oldData)
             .add(function (dataIndex) {
                 if (!data.hasValue(dataIndex)) {
@@ -42291,7 +42402,7 @@ extendChartView({
                 }
 
                 var el = elementCreator[coord.type](
-                    data, dataIndex, itemModel, layout, isHorizontalOrRadial, animationModel
+                    dataIndex, layout, isHorizontalOrRadial, animationModel, false, roundCap
                 );
                 data.setItemGraphicEl(dataIndex, el);
                 group.add(el);
@@ -42325,7 +42436,7 @@ extendChartView({
                 }
                 else {
                     el = elementCreator[coord.type](
-                        data, newIndex, itemModel, layout, isHorizontalOrRadial, animationModel, true
+                        newIndex, layout, isHorizontalOrRadial, animationModel, true, roundCap
                     );
                 }
 
@@ -42449,7 +42560,7 @@ var clip = {
 var elementCreator = {
 
     cartesian2d: function (
-        data, dataIndex, itemModel, layout, isHorizontal,
+        dataIndex, layout, isHorizontal,
         animationModel, isUpdate
     ) {
         var rect = new Rect({shape: extend({}, layout)});
@@ -42470,15 +42581,18 @@ var elementCreator = {
     },
 
     polar: function (
-        data, dataIndex, itemModel, layout, isRadial,
-        animationModel, isUpdate
+        dataIndex, layout, isRadial,
+        animationModel, isUpdate, roundCap
     ) {
         // Keep the same logic with bar in catesion: use end value to control
         // direction. Notice that if clockwise is true (by default), the sector
         // will always draw clockwisely, no matter whether endAngle is greater
         // or less than startAngle.
         var clockwise = layout.startAngle < layout.endAngle;
-        var sector = new Sector({
+
+        var ShapeClass = (!isRadial && roundCap) ? Sausage : Sector;
+
+        var sector = new ShapeClass({
             shape: defaults({clockwise: clockwise}, layout)
         });
 
@@ -44781,7 +44895,8 @@ function Radar(radarModel, ecModel, api) {
 
     this._indicatorAxes = map(radarModel.getIndicatorModels(), function (indicatorModel, idx) {
         var dim = 'indicator_' + idx;
-        var indicatorAxis = new IndicatorAxis(dim, new IntervalScale());
+        var indicatorAxis = new IndicatorAxis(dim,
+            (indicatorModel.get('axisType') === 'log') ? new LogScale() : new IntervalScale());
         indicatorAxis.name = indicatorModel.get('name');
         // Inject model and axis
         indicatorAxis.model = indicatorModel;
@@ -45042,6 +45157,7 @@ var RadarModel = extendComponentModel({
         var scale = this.get('scale');
         var axisLine = this.get('axisLine');
         var axisTick = this.get('axisTick');
+        var axisType = this.get('axisType');
         var axisLabel = this.get('axisLabel');
         var nameTextStyle = this.get('name');
         var showName = this.get('name.show');
@@ -45068,8 +45184,9 @@ var RadarModel = extendComponentModel({
                 scale: scale,
                 axisLine: axisLine,
                 axisTick: axisTick,
+                axisType: axisType,
                 axisLabel: axisLabel,
-                // Competitable with 2 and use text
+                // Compatible with 2 and use text
                 name: indicatorOpt.text,
                 nameLocation: 'end',
                 nameGap: nameGap,
@@ -45145,6 +45262,7 @@ var RadarModel = extendComponentModel({
         ),
         axisLabel: defaultsShow(valueAxisDefault.axisLabel, false),
         axisTick: defaultsShow(valueAxisDefault.axisTick, false),
+        axisType: 'interval',
         splitLine: defaultsShow(valueAxisDefault.splitLine, true),
         splitArea: defaultsShow(valueAxisDefault.splitArea, true),
 
@@ -46043,6 +46161,8 @@ var geoJSONLoader = {
             throw new Error('Invalid geoJson format\n' + e.message);
         }
 
+        fixNanhai(mapName, regions);
+
         each$1(regions, function (region) {
             var regionName = region.name;
 
@@ -46059,8 +46179,6 @@ var geoJSONLoader = {
                 );
             }
         });
-
-        fixNanhai(mapName, regions);
 
         return (inner$7(mapRecord).parsed = {
             regions: regions,
@@ -50402,9 +50520,12 @@ function updateNode(data, dataIndex, symbolEl, group, seriesModel, seriesScope) 
         }
 
         var textPosition = isLeft ? 'left' : 'right';
+        var rotate = seriesScope.labelModel.get('rotate');
+        var labelRotateRadian = rotate * (Math.PI / 180);
+
         symbolPath.setStyle({
-            textPosition: textPosition,
-            textRotation: -rad,
+            textPosition: seriesScope.labelModel.get('position') || textPosition,
+            textRotation: rotate == null ? -rad : labelRotateRadian,
             textOrigin: 'center',
             verticalAlign: 'middle'
         });
@@ -56779,8 +56900,9 @@ function forceLayout$1(nodes, edges, opts) {
             nodes[idx].fixed = true;
         },
 
+        // enhanced-echarts modified
         setUnfixed: function (idx) {
-            nodes[idx].fixed = false;
+            nodes[idx].fixed = true;
         },
 
         /**
@@ -56794,6 +56916,9 @@ function forceLayout$1(nodes, edges, opts) {
             var nLen = nodes.length;
             for (var i = 0; i < edges.length; i++) {
                 var e = edges[i];
+                if (e.ignoreForceLayout) {
+                    continue;
+                }
                 var n1 = e.n1;
                 var n2 = e.n2;
 
@@ -56935,11 +57060,13 @@ var forceLayout = function (ecModel) {
                 if (isNaN(d)) {
                     d = (edgeLength[0] + edgeLength[1]) / 2;
                 }
+                var edgeModel = edge.getModel();
                 return {
                     n1: nodes[edge.node1.dataIndex],
                     n2: nodes[edge.node2.dataIndex],
                     d: d,
-                    curveness: edge.getModel().get('lineStyle.curveness') || 0
+                    curveness: edgeModel.get('lineStyle.curveness') || 0,
+                    ignoreForceLayout: edgeModel.get('ignoreForceLayout')
                 };
             });
 
@@ -57150,11 +57277,6 @@ var GaugeSeries = SeriesModel.extend({
     type: 'series.gauge',
 
     getInitialData: function (option, ecModel) {
-        var dataOpt = option.data || [];
-        if (!isArray(dataOpt)) {
-            dataOpt = [dataOpt];
-        }
-        option.data = dataOpt;
         return createListSimply(this, ['value']);
     },
 
@@ -72873,6 +72995,8 @@ function barLayoutPolar(seriesType, ecModel, api) {
         var valueDim = data.mapDimension(valueAxis.dim);
         var baseDim = data.mapDimension(baseAxis.dim);
         var stacked = isDimensionStacked(data, valueDim /*, baseDim*/);
+        var clampLayout = baseAxis.dim !== 'radius'
+            || !seriesModel.get('roundCap', true);
 
         var valueAxisStart = valueAxis.getExtent()[0];
 
@@ -72924,8 +73048,7 @@ function barLayoutPolar(seriesType, ecModel, api) {
             }
             // tangential sector
             else {
-                // angleAxis must be clamped.
-                var angleSpan = valueAxis.dataToAngle(value, true) - valueAxisStart;
+                var angleSpan = valueAxis.dataToAngle(value, clampLayout) - valueAxisStart;
                 var radius = baseAxis.dataToRadius(baseValue);
 
                 if (Math.abs(angleSpan) < barMinAngle) {
@@ -73729,10 +73852,23 @@ function resizePolar(polar, polarModel, api) {
 
     var radiusAxis = polar.getRadiusAxis();
     var size = Math.min(width, height) / 2;
-    var radius = parsePercent$1(polarModel.get('radius'), size);
+
+    var radius = polarModel.get('radius');
+    if (radius == null) {
+        radius = [0, "100%"];
+    }
+    else if (!isArray(radius)) {
+        // r0 = 0
+        radius = [0, radius];
+    }
+    radius = [
+        parsePercent$1(radius[0], size),
+        parsePercent$1(radius[1], size)
+    ];
+
     radiusAxis.inverse
-        ? radiusAxis.setExtent(radius, 0)
-        : radiusAxis.setExtent(0, radius);
+        ? radiusAxis.setExtent(radius[1], radius[0])
+        : radiusAxis.setExtent(radius[0], radius[1]);
 }
 
 /**
@@ -73947,19 +74083,38 @@ AxisView.extend({
     _axisLine: function (angleAxisModel, polar, ticksAngles, radiusExtent) {
         var lineStyleModel = angleAxisModel.getModel('axisLine.lineStyle');
 
-        var circle = new Circle({
-            shape: {
-                cx: polar.cx,
-                cy: polar.cy,
-                r: radiusExtent[getRadiusIdx(polar)]
-            },
-            style: lineStyleModel.getLineStyle(),
-            z2: 1,
-            silent: true
-        });
-        circle.style.fill = null;
+        // extent id of the axis radius (r0 and r)
+        var rId = getRadiusIdx(polar);
+        var r0Id = rId ? 0 : 1;
 
-        this.group.add(circle);
+        var shape;
+        if (radiusExtent[r0Id] === 0) {
+            shape = new Circle({
+                shape: {
+                    cx: polar.cx,
+                    cy: polar.cy,
+                    r: radiusExtent[rId]
+                },
+                style: lineStyleModel.getLineStyle(),
+                z2: 1,
+                silent: true
+            });
+        }
+        else {
+            shape = new Ring({
+                shape: {
+                    cx: polar.cx,
+                    cy: polar.cy,
+                    r: radiusExtent[rId],
+                    r0: radiusExtent[r0Id]
+                },
+                style: lineStyleModel.getLineStyle(),
+                z2: 1,
+                silent: true
+            });
+        }
+        shape.style.fill = null;
+        this.group.add(shape);
     },
 
     /**
@@ -79097,7 +79252,21 @@ var DataZoomModel = extendComponentModel({
         this._autoThrottle = true;
 
         /**
-         * 'percent' or 'value'
+         * It is `[rangeModeForMin, rangeModeForMax]`.
+         * The optional values for `rangeMode`:
+         * + `'value'` mode: the axis extent will always be determined by
+         *     `dataZoom.startValue` and `dataZoom.endValue`, despite
+         *     how data like and how `axis.min` and `axis.max` are.
+         * + `'percent'` mode: `100` represents 100% of the `[dMin, dMax]`,
+         *     where `dMin` is `axis.min` if `axis.min` specified, otherwise `data.extent[0]`,
+         *     and `dMax` is `axis.max` if `axis.max` specified, otherwise `data.extent[1]`.
+         *     Axis extent will be determined by the result of the percent of `[dMin, dMax]`.
+         *
+         * For example, when users are using dynamic data (update data periodically via `setOption`),
+         * if in `'value`' mode, the window will be kept in a fixed value range despite how
+         * data are appended, while if in `'percent'` mode, whe window range will be changed alone with
+         * the appended data (suppose `axis.min` and `axis.max` are not specified).
+         *
          * @private
          */
         this._rangePropMode = ['percent', 'percent'];
@@ -82779,6 +82948,12 @@ extendComponentView({
             areas: clone(areas),
             $from: modelId
         });
+        opt.isEnd && this.api.dispatchAction({
+            type: 'brushEnd',
+            brushId: modelId,
+            areas: clone(areas),
+            $from: modelId
+        });
     }
 
 });
@@ -82850,6 +83025,11 @@ registerAction(
  */
 registerAction(
     {type: 'brushSelect', event: 'brushSelected', update: 'none'},
+    function () {}
+);
+
+registerAction(
+    {type: 'brushEnd', event: 'brushEnd', update: 'none'},
     function () {}
 );
 
@@ -95690,7 +95870,7 @@ registerPainter('svg', SVGPainter);
 
 
 
-// `grapchic` component, for example:
+// `graphic` component, for example:
 // chart.setOption({
 //     graphic: {...}
 // });
