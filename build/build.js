@@ -21,10 +21,10 @@
 
 const fsExtra = require('fs-extra');
 const fs = require('fs');
-const {resolve} = require('path');
+const { resolve } = require('path');
 const config = require('./config.js');
 const commander = require('commander');
-const {build, watch, color} = require('zrender/build/helper');
+const { build, watch, color } = require('zrender/build/helper');
 const ecLangPlugin = require('./rollup-plugin-ec-lang');
 const prePublish = require('./pre-publish');
 const recheckDEV = require('zrender/build/babel-plugin-transform-remove-dev').recheckDEV;
@@ -52,33 +52,33 @@ function run() {
             '  For example:',
             '',
             egIndent + 'node build/build.js --release'
-                + '\n' + descIndent + '# Build all to `dist` folder.',
+            + '\n' + descIndent + '# Build all to `dist` folder.',
             egIndent + 'node build/build.js --prepublish'
-                + '\n' + descIndent + '# Only prepublish.',
+            + '\n' + descIndent + '# Only prepublish.',
             egIndent + 'node build/build.js --removedev'
-                + '\n' + descIndent + '# Remove __DEV__ code. If --min, __DEV__ always be removed.',
+            + '\n' + descIndent + '# Remove __DEV__ code. If --min, __DEV__ always be removed.',
             egIndent + 'node build/build.js --type ""'
-                + '\n' + descIndent + '# Only generate `dist/echarts.js`.',
+            + '\n' + descIndent + '# Only generate `dist/echarts.js`.',
             egIndent + 'node build/build.js --type common --min'
-                + '\n' + descIndent + '# Only generate `dist/echarts.common.min.js`.',
+            + '\n' + descIndent + '# Only generate `dist/echarts.common.min.js`.',
             egIndent + 'node build/build.js --type simple --min --lang en'
-                + '\n' + descIndent + '# Only generate `dist/echarts-en.simple.min.js`.',
+            + '\n' + descIndent + '# Only generate `dist/echarts-en.simple.min.js`.',
             egIndent + 'node build/build.js --lang "my/lang.js" -i "my/index.js" -o "my/bundle.js"'
-                + '\n' + descIndent + '# Take `<cwd>/my/index.js` as input and generate `<cwd>/my/bundle.js`,'
-                + '\n' + descIndent + 'where `<cwd>/my/lang.js` is used as language file.',
+            + '\n' + descIndent + '# Take `<cwd>/my/index.js` as input and generate `<cwd>/my/bundle.js`,'
+            + '\n' + descIndent + 'where `<cwd>/my/lang.js` is used as language file.',
         ].join('\n'))
         .option(
             '-w, --watch', [
-            'Watch modifications of files and auto-compile to dist file. For example,',
-            descIndent + '`echarts/dist/echarts.js`.'
-        ].join('\n'))
+                'Watch modifications of files and auto-compile to dist file. For example,',
+                descIndent + '`echarts/dist/echarts.js`.'
+            ].join('\n'))
         .option(
             '--lang <language file path or shortcut>', [
-            'Use the specified file instead of `echarts/src/lang.js`. For example:',
-            descIndent + '`--lang en` will use `echarts/src/langEN.js`.',
-            descIndent + '`--lang my/langDE.js` will use `<cwd>/my/langDE.js`. -o must be specified in this case.',
-            descIndent + '`--lang /my/indexSW.js` will use `/my/indexSW.js`. -o must be specified in this case.'
-        ].join('\n'))
+                'Use the specified file instead of `echarts/src/lang.js`. For example:',
+                descIndent + '`--lang en` will use `echarts/src/langEN.js`.',
+                descIndent + '`--lang my/langDE.js` will use `<cwd>/my/langDE.js`. -o must be specified in this case.',
+                descIndent + '`--lang /my/indexSW.js` will use `/my/indexSW.js`. -o must be specified in this case.'
+            ].join('\n'))
         .option(
             '--release',
             'Build all for release'
@@ -97,9 +97,9 @@ function run() {
         )
         .option(
             '--type <type name>', [
-            'Can be "simple" or "common" or "" (default). For example,',
-            descIndent + '`--type ""` or `--type "common"`.'
-        ].join('\n'))
+                'Can be "simple" or "common" or "" (default). For example,',
+                descIndent + '`--type ""` or `--type "common"`.'
+            ].join('\n'))
         .option(
             '--sourcemap',
             'Whether output sourcemap.'
@@ -155,14 +155,14 @@ function run() {
         let configForCheck;
 
         [
-            {min: false},
-            {min: true},
-            {min: false, lang: 'en'},
-            {min: true, lang: 'en'}
+            { min: false },
+            { min: true },
+            { min: false, lang: 'en' },
+            { min: true, lang: 'en' }
         ].forEach(function (opt) {
 
             ['', 'simple', 'common'].forEach(function (type) {
-                let singleOpt = Object.assign({type}, opt);
+                let singleOpt = Object.assign({ type }, opt);
                 normalizeParams(singleOpt);
                 let singleConfig = config.createECharts(singleOpt);
                 configs.push(singleConfig);
@@ -213,7 +213,7 @@ function handleBuildError(err) {
 
 function checkCode(singleConfig) {
     // Make sure __DEV__ is eliminated.
-    let code = fs.readFileSync(singleConfig.output.file, {encoding: 'utf-8'});
+    let code = fs.readFileSync(singleConfig.output.file, { encoding: 'utf-8' });
     if (!code) {
         throw new Error(`${singleConfig.output.file} is empty`);
     }
